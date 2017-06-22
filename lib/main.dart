@@ -4,21 +4,48 @@ import 'dart:isolate';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:sentry/sentry.dart';
+
+import 'dsn.dart';
+
+final SentryClient _sentry = new SentryClient(dsn: dsn);
+
+/// Reports [error] along with its [stackTrace] to Sentry.io.
+Future<Null> _reportError(dynamic error, dynamic stackTrace) async {
+  print('Caught error: $error');
+  print('Reporting to Sentry.io...');
+
+  final SentryResponse response = await _sentry.captureException(
+    exception: error,
+    stackTrace: stackTrace,
+  );
+
+  if (response.isSuccessful) {
+    print('Success! Event ID: ${response.eventId}');
+  } else {
+    print('Failed to report to Sentry.io: ${response.error}');
+  }
+}
 
 dynamic main() async {
-  FlutterError.onError = (FlutterErrorDetails details) {
-    print('FlutterError.onError caught: $details');
+  FlutterError.onError = (FlutterErrorDetails details) async {
+    print('FlutterError.onError caught an error');
+    await _reportError(details.exception, details.stack);
   };
 
-  final ultimateErrorCatcher = new RawReceivePort((dynamic error) {
-    print('Isolate.current.addErrorListener caught: $error');
-  });
-  Isolate.current.addErrorListener(ultimateErrorCatcher.sendPort);
+  Isolate.current.addErrorListener(new RawReceivePort((dynamic pair) async {
+    print('Isolate.current.addErrorListener caught an error');
+    await _reportError(
+      (pair as List<String>).first,
+      (pair as List<String>).last,
+    );
+  }).sendPort);
 
   runZoned<Future<Null>>(() async {
     runApp(new CrashyApp());
-  }, onError: (error, stackTrace) {
-    print('Zone caught: $error\n$stackTrace');
+  }, onError: (error, stackTrace) async {
+    print('Zone caught an error');
+    await _reportError(error, stackTrace);
   });
 }
 
