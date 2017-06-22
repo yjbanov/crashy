@@ -6,6 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:sentry/sentry.dart';
 
+// This file does not exist in the repository and is .gitignored. You have to
+// create one and add a `dsn` constant String containing your DSN value issued
+// by Sentry.io to your project.
 import 'dsn.dart';
 
 final SentryClient _sentry = new SentryClient(dsn: dsn);
