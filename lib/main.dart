@@ -1,16 +1,46 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+/// This is a sample Flutter app that demonstrates to to catch various kinds
+/// of errors in Flutter apps and report them to Sentry.io.
+/// 
+/// Explanations are provided in the inline comments in the code below.
+library crashy;
+
 import 'dart:async';
 import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+// This import the Dart Sentry.io client that sends crash reports to Sentry.io.
 import 'package:sentry/sentry.dart';
 
-// This file does not exist in the repository and is .gitignored. You have to
-// create one and add a `dsn` constant String containing your DSN value issued
-// by Sentry.io to your project.
+// This file does not exist in the repository and is .gitignored. In your local
+// clone of this repository, create this file and add a top-level [String]
+// constant containing the DSN value issued by Sentry.io to your project.
+//
+// This method of supplying DSN is only for demo purposes. In a real app you
+// might want to get it using a more robust method, such as via environment
+// variables, a configuration file or a platform-specific secret key storage.
 import 'dsn.dart';
 
+/// Sentry.io client used to send crash reports (or more generally "events").
+/// 
+/// This client uses the default client parameters. For example, it uses a
+/// plain HTTP client that does not retry failed report attempts and does
+/// not support offline mode. You might want to use a different HTTP client,
+/// one that has these features. Please read the documentation for the
+/// [SentryClient] constructor to learn how you can customize it.
+/// 
+/// [SentryClient.environmentAttributes] are particularly useful in a real
+/// app. Use them to specify attributes of your app that do not change from
+/// one event to another, such as operating system type and verion, the
+/// version of Flutter, and [device information][1].
+/// 
+/// [1]: https://github.com/flutter/plugins/tree/master/packages/device_info
 final SentryClient _sentry = new SentryClient(dsn: dsn);
 
 /// Reports [error] along with its [stackTrace] to Sentry.io.
@@ -41,24 +71,24 @@ Future<Null> _reportError(dynamic error, dynamic stackTrace) async {
   }
 }
 
-dynamic main() async {
+Future<Null> main() async {
+  // This captures errors reported by the Flutter framework.
   FlutterError.onError = (FlutterErrorDetails details) async {
-    print('FlutterError.onError caught an error');
     await _reportError(details.exception, details.stack);
   };
 
-  Isolate.current.addErrorListener(new RawReceivePort((dynamic pair) async {
-    print('Isolate.current.addErrorListener caught an error');
-    await _reportError(
-      (pair as List<String>).first,
-      (pair as List<String>).last,
-    );
-  }).sendPort);
-
+  // This captures errors not caught by the Flutter framework, such as those
+  // thrown from [Timer]s and microtasks. It works by running the app in a
+  // custom [Zone], which tracks all events and microtasks and forwards all
+  // errors to a custom `onError` handler, which forwards it to `_reportError`.
+  //
+  // More about zones:
+  //
+  // - https://api.dartlang.org/stable/1.24.2/dart-async/Zone-class.html
+  // - https://www.dartlang.org/articles/libraries/zones
   runZoned<Future<Null>>(() async {
     runApp(new CrashyApp());
   }, onError: (error, stackTrace) async {
-    print('Zone caught an error');
     await _reportError(error, stackTrace);
   });
 }
