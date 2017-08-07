@@ -21,7 +21,7 @@ Future<Null> _reportError(dynamic error, dynamic stackTrace) async {
   // check if you are running in dev mode using an assertion and omit sending
   // the report.
   bool inDevMode = false;
-  assert((inDevMode = true));
+  assert(inDevMode = true);
   if (inDevMode) {
     print('In dev mode. Not sending report.');
     return;
