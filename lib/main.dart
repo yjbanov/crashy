@@ -2,20 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/// This is a sample Flutter app that demonstrates to to catch various kinds
+/// This is a sample Flutter app that demonstrates how to catch various kinds
 /// of errors in Flutter apps and report them to Sentry.io.
 /// 
 /// Explanations are provided in the inline comments in the code below.
 library crashy;
 
 import 'dart:async';
-import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-// This import the Dart Sentry.io client that sends crash reports to Sentry.io.
+// This imports the Dart Sentry.io client that sends crash reports to Sentry.io.
 import 'package:sentry/sentry.dart';
 
 // This file does not exist in the repository and is .gitignored. In your local
@@ -43,6 +42,17 @@ import 'dsn.dart';
 /// [1]: https://github.com/flutter/plugins/tree/master/packages/device_info
 final SentryClient _sentry = new SentryClient(dsn: dsn);
 
+/// Whether the VM is running in debug mode.
+/// 
+/// This is useful to decide whether a report should be sent to sentry. Usually
+/// reports from dev mode are not very useful, as these happen on developers'
+/// workspaces rather than on users' devices in production.
+bool get isInDebugMode {
+  bool inDebugMode = false;
+  assert(inDebugMode = true);
+  return inDebugMode;
+}
+
 /// Reports [error] along with its [stackTrace] to Sentry.io.
 Future<Null> _reportError(dynamic error, dynamic stackTrace) async {
   print('Caught error: $error');
@@ -50,10 +60,9 @@ Future<Null> _reportError(dynamic error, dynamic stackTrace) async {
   // Errors thrown in development mode are unlikely to be interesting. You can
   // check if you are running in dev mode using an assertion and omit sending
   // the report.
-  bool inDevMode = false;
-  assert(inDevMode = true);
-  if (inDevMode) {
-    print('In dev mode. Not sending report.');
+  if (isInDebugMode) {
+    print(stackTrace);
+    print('In dev mode. Not sending report to Sentry.io.');
     return;
   }
 
@@ -74,13 +83,22 @@ Future<Null> _reportError(dynamic error, dynamic stackTrace) async {
 Future<Null> main() async {
   // This captures errors reported by the Flutter framework.
   FlutterError.onError = (FlutterErrorDetails details) async {
-    await _reportError(details.exception, details.stack);
+    if (isInDebugMode) {
+      // In development mode simply print to console.
+      FlutterError.dumpErrorToConsole(details);
+    } else {
+      // In production mode report to the application zone to report to
+      // Sentry.
+      Zone.current.handleUncaughtError(details.exception, details.stack);
+    }
   };
 
-  // This captures errors not caught by the Flutter framework, such as those
-  // thrown from [Timer]s and microtasks. It works by running the app in a
-  // custom [Zone], which tracks all events and microtasks and forwards all
-  // errors to a custom `onError` handler, which forwards it to `_reportError`.
+  // This creates a [Zone] that contains the Flutter application and stablishes
+  // an error handler that captures errors and reports them.
+  //
+  // Using a zone makes sure that as many errors as possible are captured,
+  // including those thrown from [Timer]s, microtasks, I/O, and those forwarded
+  // from the `FlutterError` handler.
   //
   // More about zones:
   //
@@ -122,6 +140,19 @@ class MyHomePage extends StatelessWidget {
               elevation: 1.0,
               onPressed: () {
                 throw new StateError('This is a Dart exception.');
+              },
+            ),
+            new RaisedButton(
+              child: new Text('async Dart exception'),
+              elevation: 1.0,
+              onPressed: () async {
+                foo() async {
+                  throw new StateError('This is an async Dart exception.');
+                }
+                bar() async {
+                  await foo();
+                }
+                await bar();
               },
             ),
             new RaisedButton(
